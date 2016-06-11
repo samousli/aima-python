@@ -5,6 +5,7 @@
 
 from collections import defaultdict
 import networkx as nx
+from math import sqrt
 
 # ______________________________________________________________________________
 # Grammars and Lexicons
@@ -207,16 +208,6 @@ def CYK_parse(words, grammar):
                     P[X, start, length] = max(P[X, start, length],
                                               P[Y, start, len1] * P[Z, start+len1, len2] * p)
     return P
-
-
-class Page:
-    """"""
-    def __init__(self, name=""):
-        self.name = name
-        self.authority = 1
-        self.hub = 1
-
-
 # Borrowed from: http://hipolabs.com/en/blog/network-analysis-fundamentals/
 network = {
     "fatih": ["erdem", "mehmetbarancay", "tayyiperdogdu", "cemal",
@@ -248,28 +239,51 @@ network = {
     "martinfowler": ["douglescrockford", "johnresig"],
 }
 
-class Pages:
 
+class Page:
+    """"""
+    def __init__(self, name="", auth=1, hub=1):
+        self.name = name
+        self.authority = auth
+        self.hub = hub
+
+    # def __eq__(self, other):
+    #     if isinstance(other, self.__class__):
+    #         return self.__dict__ == other.__dict__
+    #     else:
+    #         return False
+
+    # def __ne__(self, other):
+    #     return not self.__eq__(other)
+
+    def __hash__(self):
+        return hash(self.name)
+
+
+class Pages:
+    """"""
     def __init__(self, data):
         self.graph = nx.DiGraph()
         # First thing to do is to add the nodes to the graph
-        self.graph.add_nodes_from(Page(k) for k in data.keys())
-        for users in data.values():
-            for page in users:
-                if page not in self.graph:
-                    self.graph.add_node(Page(user))
+        self.graph.add_nodes_from(Page(p) for p in data.keys())
+
+        for pages in data.values():
+            for page in pages:
+                p = Page(page)
+                if p not in self.graph:
+                    self.graph.add_node(p)
 
         # Then we determine the edges on the nodes
         for page, out_links in data.items():
             for out_page in out_links:
-                self.graph.add_edge(page, out_page)
+                self.graph.add_edge(Page(p), Page(out_page))
 
     def __iter__(self):
-        return self.graph.keys()
+        return self.graph
 
     def relevant(self, query):
         rel = []
-        for page in self.graph.keys():
+        for page in self.graph:
             # We are modeling queries for page names only
             if page.name == query:
                 rel.append(page)
@@ -278,18 +292,46 @@ class Pages:
     def expand(self, pages):
         expansion = set(pages)
         for p in pages:
-            expansion.extend(self.graph.predecessors_iter(p))
-            expansion.extend(self.graph.successors_iter(p))
+
+            expansion.update(self.graph.predecessors_iter(p))
+            expansion.update(self.graph.successors_iter(p))
         return list(expansion)
 
-def HITS(query, pages):
-    pages = pages.expand(pages.relevant(query))
-    # This can be removed, but following the pseudocode closely.
+    def inlinks(self, page):
+        return self.graph.predecessors_iter(page)
+
+    def outlinks(self, page):
+        return self.graph.successors_iter(page)
+
+
+def normalize(pages):
+    # Calculate sum of square roots for hubs and authorities
+    hub_score = sum(sqrt(p.hub) for p in pages)
+    auth_score = sum(sqrt(p.authority) for p in pages)
+
+    for p in pages:
+        p.hub /= hub_score
+        p.authority /= auth_score
+
+
+def HITS(query, dataset, num_iters=10000):
+    pages = dataset.expand(dataset.relevant(query))
+    # This is unnecessary, but following the pseudocode closely.
     for p in pages:
         p.hub = 1
         p.authority = 1
 
-    # Convergence to follow
-    for __ in range(100):
+    # Since the book doesn't cover any convergence criteria,
+    # we repeat the process num_iters times.
+    for __ in range(num_iters):
         for p in pages:
-            print(p)
+            p.authority = sum(inlink.hub for inlink in dataset.inlinks(p))
+            p.hub = sum(outlink.authority for outlink in dataset.outlinks(p))
+
+        normalize(pages)
+    return pages
+
+
+r = HITS("fatih", Pages(network))
+pr = '\n'.join("{}:\t{}, {}".format(p.name, p.hub, p.authority) for p in r)
+print(pr)
