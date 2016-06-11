@@ -4,6 +4,7 @@
 # from the third edition until this gets reviewed.)
 
 from collections import defaultdict
+import networkx as nx
 
 # ______________________________________________________________________________
 # Grammars and Lexicons
@@ -206,3 +207,89 @@ def CYK_parse(words, grammar):
                     P[X, start, length] = max(P[X, start, length],
                                               P[Y, start, len1] * P[Z, start+len1, len2] * p)
     return P
+
+
+class Page:
+    """"""
+    def __init__(self, name=""):
+        self.name = name
+        self.authority = 1
+        self.hub = 1
+
+
+# Borrowed from: http://hipolabs.com/en/blog/network-analysis-fundamentals/
+network = {
+    "fatih": ["erdem", "mehmetbarancay", "tayyiperdogdu", "cemal",
+              "taylan", "yigit", "serkan", "tuna", "cihanokyay"],
+    "cemal": ["taylan", "yigit", "serkan", "sinan"],
+    "erdem": ["fatih", "yigit"],
+    "taylan": ["yigit", "serkan", "tuna", "cemal"],
+    "yigit": ["yigit", "serkan", "tuna", "can"],
+    "serkan": ["yigit", "serkan", "tuna", "erdem"],
+    "tuna": ["yigit", "taylan", "can"],
+    "can": ["yigit", "serkan", "fatih", "sinan"],
+    "sinan": ["yigit", "serkan", "fatih", "cemal"],
+    "suatavni": ["tayyiperdogdu", "abdullahcicek", "mehmetbarancay"],
+    "tayyiperdogdu": ["abdullahcicek", "suatavni", "feyzullahgulen"],
+    "abdullahcicek": ["feyzullahgulen"],
+    "feyzullahgulen": ["suatavni", "tayyiperdogdu", "suatavni"],
+    "mehmetbarancay": ["suatavni", "feyzullahgulen"],
+    "cihanokyay": ["fatihkadirakin", "sametatdag", "gokmengorgen"],
+    "fatihkadirakin": ["cihanokyay", "berkerpeksag", "johnresig"],
+    "sametatdag": ["cihanokyay", "fatihkadirakin", "berkerpeksag"],
+    "berkerpeksag": ["cihanokyay", "gokmengorgen"],
+    "gokmengorgen": ["cihanokyay", "sametatdag", "berkerpeksag"],
+    "eminbugrasakal": ["eminbugrasakal"],
+    "johnresig": ["douglescrockford", "addyosmani", "marijnhaverbeke"],
+    "addyosmani": ["douglescrockford", "johnresig", "marijnhaverbeke"],
+    "trevorburnham": ["douglescrockford", "johnresig", "marijnhaverbeke"],
+    "marijnhaverbeke": ["douglescrockford", "addyosmani", "trevorburnham"],
+    "douglescrockford": ["martinfowler", "trevorburnham"],
+    "martinfowler": ["douglescrockford", "johnresig"],
+}
+
+class Pages:
+
+    def __init__(self, data):
+        self.graph = nx.DiGraph()
+        # First thing to do is to add the nodes to the graph
+        self.graph.add_nodes_from(Page(k) for k in data.keys())
+        for users in data.values():
+            for page in users:
+                if page not in self.graph:
+                    self.graph.add_node(Page(user))
+
+        # Then we determine the edges on the nodes
+        for page, out_links in data.items():
+            for out_page in out_links:
+                self.graph.add_edge(page, out_page)
+
+    def __iter__(self):
+        return self.graph.keys()
+
+    def relevant(self, query):
+        rel = []
+        for page in self.graph.keys():
+            # We are modeling queries for page names only
+            if page.name == query:
+                rel.append(page)
+        return rel
+
+    def expand(self, pages):
+        expansion = set(pages)
+        for p in pages:
+            expansion.extend(self.graph.predecessors_iter(p))
+            expansion.extend(self.graph.successors_iter(p))
+        return list(expansion)
+
+def HITS(query, pages):
+    pages = pages.expand(pages.relevant(query))
+    # This can be removed, but following the pseudocode closely.
+    for p in pages:
+        p.hub = 1
+        p.authority = 1
+
+    # Convergence to follow
+    for __ in range(100):
+        for p in pages:
+            print(p)
