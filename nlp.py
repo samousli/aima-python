@@ -247,14 +247,14 @@ class Page:
         self.authority = auth
         self.hub = hub
 
-    # def __eq__(self, other):
-    #     if isinstance(other, self.__class__):
-    #         return self.__dict__ == other.__dict__
-    #     else:
-    #         return False
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.name == other.name
+        else:
+            return False
 
-    # def __ne__(self, other):
-    #     return not self.__eq__(other)
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
     def __hash__(self):
         return hash(self.name)
@@ -276,26 +276,25 @@ class Pages:
         # Then we determine the edges on the nodes
         for page, out_links in data.items():
             for out_page in out_links:
-                self.graph.add_edge(Page(p), Page(out_page))
+                self.graph.add_edge(Page(page), Page(out_page))
 
     def __iter__(self):
         return self.graph
 
     def relevant(self, query):
-        rel = []
+        rel = set()
         for page in self.graph:
             # We are modeling queries for page names only
             if page.name == query:
-                rel.append(page)
+                rel.add(page)
         return rel
 
     def expand(self, pages):
         expansion = set(pages)
         for p in pages:
-
-            expansion.update(self.graph.predecessors_iter(p))
-            expansion.update(self.graph.successors_iter(p))
-        return list(expansion)
+            expansion.update(self.graph.predecessors(p))
+            expansion.update(self.graph.successors(p))
+        return expansion
 
     def inlinks(self, page):
         return self.graph.predecessors_iter(page)
@@ -316,6 +315,8 @@ def normalize(pages):
 
 def HITS(query, dataset, num_iters=10000):
     pages = dataset.expand(dataset.relevant(query))
+    print([p.name for p in pages])
+
     # This is unnecessary, but following the pseudocode closely.
     for p in pages:
         p.hub = 1
